@@ -1,0 +1,31 @@
+# ======================
+# Python
+# ======================
+__pycache__/
+*.pyc
+.env
+venv/
+Include/
+Lib/
+Scripts/
+pyvenv.cfg
+
+# ======================
+# Node / React
+# ======================
+node_modules/
+dist/
+build/
+
+# ======================
+# Models / cache
+# ======================
+.cache/
+*.pt
+*.pth
+
+# ======================
+# OS / Editor
+# ======================
+.DS_Store
+.vscode/
