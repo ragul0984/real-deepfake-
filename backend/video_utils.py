@@ -7,10 +7,10 @@ from PIL import Image
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
-# Face detector
+
 mtcnn = MTCNN(keep_all=False, device=device)
 
-# EfficientNet (NO .pth FILE REQUIRED)
+
 effnet = models.efficientnet_b0(weights="IMAGENET1K_V1")
 effnet.classifier = torch.nn.Identity()
 effnet = effnet.to(device).eval()
@@ -48,7 +48,7 @@ def analyze_video(video_path, max_frames=25):
             feat = effnet(face_tensor).cpu().numpy()
             features.append(feat)
 
-        # FFT artifact score
+        
         gray = cv2.cvtColor(np.array(face_img), cv2.COLOR_RGB2GRAY)
         fft = np.fft.fft2(gray)
         fft_shift = np.fft.fftshift(fft)
@@ -64,7 +64,7 @@ def analyze_video(video_path, max_frames=25):
     temporal_variance = np.mean(np.var(features, axis=0))
     fft_mean = np.mean(fft_scores)
 
-    # Heuristics (tested + stable)
+    
     ai_score = (temporal_variance * 8) + (fft_mean * 0.15)
 
     if ai_score > 1.2:

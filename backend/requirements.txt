@@ -1,13 +1,19 @@
+
 flask
 flask-cors
 numpy
 requests
 pillow
+Flask
+flask-cors
+numpy
+Pillow
 
 torch
 torchvision
 transformers
 facenet-pytorch
+
 opencv-python
 mediapipe
 timm
@@ -16,3 +22,11 @@ librosa
 
 tldextract
 beautifulsoup4
+
+librosa
+requests
+tldextract
+beautifulsoup4
+opencv-python
+mediapipe
+

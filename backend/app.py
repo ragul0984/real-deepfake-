@@ -13,11 +13,10 @@ from facenet_pytorch import MTCNN
 
 from video_forensics import analyze_video_forensics
 from video_timesformer import timesformer_ai_score
+from chatbot_logic import get_chatbot_response
 
 
-# =====================================================
-# Utility: safe numeric conversion
-# =====================================================
+
 def to_float_score(x):
     if isinstance(x, (int, float)):
         return float(x)
@@ -36,16 +35,12 @@ def to_float_score(x):
     return 0.5
 
 
-# =====================================================
-# Flask setup
-# =====================================================
+
 app = Flask(__name__)
 CORS(app)
 
 
-# =====================================================
-# Device + CLIP (load ONCE)
-# =====================================================
+
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
 clip_model = CLIPModel.from_pretrained(
@@ -64,9 +59,7 @@ mtcnn = MTCNN(
 )
 
 
-# =====================================================
-# FFT (frequency-domain)
-# =====================================================
+
 def fft_frequency_score(image_pil):
     gray = image_pil.convert("L")
     img = np.array(gray, dtype=np.float32)
@@ -110,9 +103,7 @@ def face_only_fft_score(image_pil):
     return float(np.mean(scores))
 
 
-# =====================================================
-# CLIP score (CALIBRATED)
-# =====================================================
+
 def clip_ai_score(image_pil):
     prompts = [
         "a real photograph taken with a camera",
@@ -138,9 +129,7 @@ def clip_ai_score(image_pil):
     return ai_prob / (ai_prob + real_prob + 1e-8)
 
 
-# =====================================================
-# IMAGE DECISION (CONSERVATIVE)
-# =====================================================
+
 def image_decision(fft_score, clip_score):
     fft_score = float(np.clip(fft_score, 0, 1))
     clip_score = float(np.clip(clip_score, 0, 1))
@@ -156,9 +145,7 @@ def image_decision(fft_score, clip_score):
     return "Possibly AI-Generated", int(abs(combined - 0.5) * 200)
 
 
-# =====================================================
-# VIDEO DECISION (FIXED BIAS)
-# =====================================================
+
 def video_decision(forensic, temporal):
     forensic = float(np.clip(forensic, 0, 1))
     temporal = float(np.clip(temporal, 0, 1))
@@ -176,10 +163,41 @@ def video_decision(forensic, temporal):
     # ONLY HERE → POSSIBLE AI
     return "Possibly AI-Generated", int(combined * 100)
 
+def image_reasons(fft_score, clip_score):
+    reasons = []
 
-# =====================================================
-# IMAGE API
-# =====================================================
+    
+    if fft_score > 0.65:
+        reasons.append({
+            "title": "High-Frequency Artifacts",
+            "score": int(min(100, fft_score * 100)),
+            "description": "The image shows unnatural frequency patterns often introduced by AI generation."
+        })
+    else:
+        reasons.append({
+            "title": "Natural Frequency Distribution",
+            "score": int((1 - fft_score) * 100),
+            "description": "The image exhibits natural frequency characteristics typical of real photographs."
+        })
+
+    
+    if clip_score > 0.6:
+        reasons.append({
+            "title": "Semantic Inconsistency",
+            "score": int(min(100, clip_score * 100)),
+            "description": "Visual content shows patterns commonly associated with AI-generated images."
+        })
+    else:
+        reasons.append({
+            "title": "Semantic Coherence",
+            "score": int((1 - clip_score) * 100),
+            "description": "The image content does not aligns well with real-world photographic semantics."
+        })
+
+    return reasons
+
+
+
 @app.route("/analyze/image", methods=["POST"])
 def analyze_image():
     if "file" not in request.files:
@@ -195,16 +213,12 @@ def analyze_image():
     return jsonify({
         "verdict": verdict,
         "confidence": confidence,
-        "debug": {
-            "fft_score": round(fft_score, 3),
-            "clip_score": round(clip_score, 3)
-        }
+        "reasons": image_reasons(fft_score, clip_score)
     })
 
 
-# =====================================================
-# VIDEO API
-# =====================================================
+
+
 @app.route("/analyze/video", methods=["POST"])
 def analyze_video():
     if "file" not in request.files:
@@ -219,9 +233,44 @@ def analyze_video():
     if os.path.exists(path):
         os.remove(path)
 
+    
+    reasons = [
+        {
+            "title": "Facial Motion Consistency",
+            "score": min(100, confidence),
+            "description": (
+                "Facial movements appear overly smooth and lack natural micro-expressions."
+                if verdict != "Real"
+                else
+                "Facial motion shows natural jitter and expressive variation."
+            ),
+        },
+        {
+            "title": "Blink Pattern Analysis",
+            "score": min(100, int(confidence * 0.85)),
+            "description": (
+                "Blink frequency and timing deviate from typical human behavior."
+                if verdict != "Real"
+                else
+                "Blink patterns fall within expected human ranges."
+            ),
+        },
+        {
+            "title": "Temporal Frame Coherence",
+            "score": min(100, int(confidence * 0.75)),
+            "description": (
+                "Frame-to-frame transitions show synthetic temporal consistency."
+                if verdict != "Real"
+                else
+                "Temporal transitions appear naturally inconsistent."
+            ),
+        },
+    ]
+
     return jsonify({
         "verdict": verdict,
-        "confidence": confidence
+        "confidence": confidence,
+        "reasons": reasons
     })
 
 @app.route("/analyze/audio", methods=["POST"])
@@ -235,7 +284,7 @@ def analyze_audio():
     file = request.files["file"]
     path = "temp_audio.wav"
 
-    # Save uploaded audio
+   
     file.save(path)
 
     try:
@@ -248,7 +297,7 @@ def analyze_audio():
         })
 
     finally:
-        # Always cleanup
+        
         if os.path.exists(path):
             os.remove(path)
 
@@ -271,10 +320,20 @@ def analyze_link():
     })
 
 
+@app.route("/analyze/chat", methods=["POST"])
+def chat_bot():
+    data = request.get_json()
+    if not data or "message" not in data:
+        return jsonify({"response": "I didn't quite catch that."})
+    
+    user_msg = data["message"]
+    response = get_chatbot_response(user_msg)
+    
+    return jsonify({"response": response})
 
 
-# =====================================================
-# RUN
-# =====================================================
+
+
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)

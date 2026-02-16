@@ -21,9 +21,7 @@ def analyze_link_forensics(url):
     url = url.replace("(.)", ".")
     url = url.replace("hxxp://", "http://").replace("hxxps://", "https://")
 
-    # --------------------------------
-    # 1. URL structure analysis
-    # --------------------------------
+    
     if len(url) > 80:
         score += 15
         reasons.append({
@@ -40,13 +38,11 @@ def analyze_link_forensics(url):
             "description": "Suspicious characters are commonly used in phishing links."
         })
 
-    # --------------------------------
-    # 2. Domain analysis
-    # --------------------------------
+    
     ext = tldextract.extract(url)
     domain = f"{ext.domain}.{ext.suffix}"
 
-    # Hyphen-stuffed domain detection
+    
     if ext.domain.count("-") >= 2:
         score += 30
         reasons.append({
@@ -55,7 +51,7 @@ def analyze_link_forensics(url):
             "description": "The domain uses excessive hyphens, a common phishing tactic."
         })
 
-    # Fake security keywords in domain
+    
     security_keywords = ["login", "secure", "verify", "account", "auth", "update"]
     if any(k in ext.domain.lower() for k in security_keywords):
         score += 25
@@ -82,9 +78,7 @@ def analyze_link_forensics(url):
             "description": "Shortened links often hide the final destination."
         })
 
-    # --------------------------------
-    # 3. Redirect behavior
-    # --------------------------------
+    
     try:
         response = requests.get(url, timeout=6, allow_redirects=True)
 
@@ -98,9 +92,7 @@ def analyze_link_forensics(url):
 
         content = response.text.lower()
 
-        # --------------------------------
-        # 4. Social engineering cues
-        # --------------------------------
+        
         triggers = [
             "verify your account",
             "urgent action required",
@@ -128,9 +120,7 @@ def analyze_link_forensics(url):
             "description": "The link could not be reliably accessed."
         })
 
-    # --------------------------------
-    # FINAL DECISION
-    # --------------------------------
+    
     if score >= 50:
         verdict = "Likely Fake"
         confidence = min(95, score)

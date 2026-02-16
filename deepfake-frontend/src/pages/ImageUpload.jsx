@@ -1,12 +1,31 @@
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import "../upload.css";
+import { motion } from "framer-motion";
+import { generateReport } from "../utils/generatePDF";
 
-export default function ImageUpload() {
+
+import OrbBackground from "../components/OrbBackground";
+
+export default function ImageUpload({ addToHistory }) {
   const fileInputRef = useRef(null);
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState(null);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
+  const [stageIndex, setStageIndex] = useState(0);
+  const resultRef = useRef(null);
+  const [pendingResult, setPendingResult] = useState(null);
+
+
+
+
+  const loadingStages = [
+    "Extracting features…",
+    "Running forensic analysis…",
+    "Evaluating authenticity…",
+    "Finalizing result…",
+  ];
+
 
   const openFilePicker = () => fileInputRef.current.click();
 
@@ -21,89 +40,166 @@ export default function ImageUpload() {
   const analyzeImage = async () => {
     setLoading(true);
 
+    const interval = setInterval(() => {
+      setStageIndex((prev) => (prev + 1) % loadingStages.length);
+    }, 900);
+
     const formData = new FormData();
     formData.append("file", file);
 
+    setStageIndex(0);
     const res = await fetch("http://localhost:5000/analyze/image", {
       method: "POST",
       body: formData,
     });
 
     const data = await res.json();
-    setLoading(false);
-    setResult(data);
+    clearInterval(interval);
+    setPendingResult(data);
+
+
+    setTimeout(() => {
+      setResult(data);
+      setLoading(false);
+
+      if (addToHistory && data) {
+        addToHistory({
+          type: "Image",
+          icon: "🖼️",
+          name: file.name,
+          verdict: data.verdict,
+          confidence: data.confidence,
+          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          path: "/image"
+        });
+      }
+    }, loadingStages.length * 900);
+
   };
 
-  // 🔥 DISPLAY LOGIC FIX (UI ONLY)
+
   const displayVerdict =
     result?.confidence <= 10
       ? "Likely Real"
       : result?.confidence >= 85
-      ? "Likely AI-Generated"
-      : result?.verdict;
+        ? "Likely AI-Generated"
+        : result?.verdict;
+
+  useEffect(() => {
+    if (result && resultRef.current) {
+      resultRef.current.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }
+  }, [result]);
+
 
   return (
-    <div className="upload-page">
-      <h1 className="upload-title">Image Deepfake Detection</h1>
+    <motion.div
+      className="upload-page"
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.35, ease: "easeOut" }}
+    >
+      <OrbBackground />
+      <div style={{ position: "relative", zIndex: 1, width: "100%", flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+        <h1 className="upload-title" style={{ paddingBottom: "20px" }}>Image Deepfake Detection</h1>
 
-      <input
-        type="file"
-        accept="image/*"
-        ref={fileInputRef}
-        onChange={handleFileChange}
-        hidden
-      />
+        <input
+          type="file"
+          accept="image/*"
+          ref={fileInputRef}
+          onChange={handleFileChange}
+          hidden
+        />
 
-      <div className="upload-area" onClick={openFilePicker}>
-        {preview ? (
-          <img src={preview} className="image-preview" />
-        ) : (
-          <>
-            <div className="upload-icon">📷</div>
-            <div className="upload-text">Click to upload image</div>
-          </>
+        <div className="upload-area" onClick={openFilePicker}>
+          {preview ? (
+            <img src={preview} className="image-preview" />
+          ) : (
+            <>
+              <div className="upload-icon">📷</div>
+              <div className="upload-text">Click to upload image</div>
+            </>
+          )}
+        </div>
+
+        {file && !loading && !result && (
+          <button className="analyze-btn" onClick={analyzeImage}>
+            Analyze
+          </button>
+        )}
+
+        {loading && (
+          <div className="loader">
+            <div className="spinner"></div>
+            <p>{loadingStages[stageIndex]}</p>
+          </div>
+        )}
+
+
+        {result && (
+          <div className="result-container" ref={resultRef}>
+            <div className="result-header">
+              <h2 className={`verdict-title ${displayVerdict.toLowerCase().includes("ai") ? "verdict-ai" : "verdict-real"}`}>
+                {displayVerdict}
+              </h2>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
+                <p className="confidence-text">Confidence: {result.confidence}%</p>
+                <button
+                  onClick={() => generateReport(result)}
+                  style={{
+                    backgroundColor: "#38bdf8",
+                    color: "#0f172a",
+                    border: "none",
+                    padding: "6px 12px",
+                    borderRadius: "6px",
+                    cursor: "pointer",
+                    fontSize: "0.9rem",
+                    fontWeight: "bold",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "6px"
+                  }}
+                >
+                  📄 Report
+                </button>
+              </div>
+
+              <div className="confidence-bar-wrapper">
+                <div
+                  className={`confidence-bar-fill ${displayVerdict.toLowerCase().includes("ai") ? "bar-ai" : "bar-real"}`}
+                  style={{ width: `${result.confidence}%` }}
+                />
+              </div>
+            </div>
+
+            {result.reasons && (
+              <div className="reasons-container">
+                {result.reasons.map((reason, idx) => (
+                  <div key={idx} className="reason-card">
+                    <div className="reason-header">
+                      <span className="reason-title">{reason.title}</span>
+                      <span className="reason-score">{reason.score}%</span>
+                    </div>
+                    <div className="reason-mini-bar">
+                      <div
+                        className={`reason-mini-fill ${reason.score > 50 ? "bar-ai" : "bar-real"}`}
+                        style={{ width: `${reason.score}%` }}
+                      />
+                    </div>
+                    <p className="reason-desc">{reason.description}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         )}
       </div>
-
-      {file && !loading && !result && (
-        <button className="analyze-btn" onClick={analyzeImage}>
-          Analyze
-        </button>
-      )}
-
-      {loading && <div className="loader">Analyzing...</div>}
-
-      {result && (
-        <div className={`result ${displayVerdict.toLowerCase().replace(" ", "-")}`}>
-          <h2>{displayVerdict}</h2>
-          <p>AI Probability: {result.confidence}%</p>
-        </div>
-      )}
-
-      {result && (
-        <div style={{ width: "100%", maxWidth: "400px", marginTop: "20px" }}>
-          <div
-            style={{
-              height: "14px",
-              background: "#1f2937",
-              borderRadius: "8px",
-              overflow: "hidden",
-              border: "1px solid #374151"
-            }}
-          >
-            <div
-              style={{
-                height: "100%",
-                width: `${result.confidence}%`,
-                background: displayVerdict.includes("AI")
-                  ? "linear-gradient(90deg, #ef4444, #f97316)"
-                  : "linear-gradient(90deg, #22c55e, #16a34a)",
-                transition: "width 0.6s ease"
-              }}
-            />
-          </div>
-        </div>
-      )}
-    </div>
+      <p className="footer-credit">
+        Built for Deepfake Detection Hackathon · Supports Image, Video, Audio & URL Analysis
+      </p>
+    </motion.div>
   );
 }

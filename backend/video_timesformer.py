@@ -3,7 +3,7 @@ import cv2
 import numpy as np
 from transformers import TimesformerForVideoClassification, AutoImageProcessor
 
-# Load model ONCE
+
 model = TimesformerForVideoClassification.from_pretrained(
     "facebook/timesformer-base-finetuned-k400"
 )
@@ -17,7 +17,7 @@ def timesformer_ai_score(video_path):
     cap = cv2.VideoCapture(video_path)
     frames = []
 
-    # sample frames
+    
     while len(frames) < 8:
         ret, frame = cap.read()
         if not ret:
@@ -28,7 +28,7 @@ def timesformer_ai_score(video_path):
     cap.release()
 
     if len(frames) < 4:
-        return 0.5  # neutral fallback
+        return 0.5  
 
     inputs = processor(
         frames,
@@ -39,7 +39,7 @@ def timesformer_ai_score(video_path):
         outputs = model(**inputs)
         probs = torch.softmax(outputs.logits, dim=1)
 
-    # label 1 = FAKE (in this model)
+    
     fake_prob = probs[0][1].item()
 
     return float(fake_prob)
